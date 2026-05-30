@@ -1,6 +1,6 @@
 # FamilyApp — Design
 
-_Status: Draft v0.2 · Last updated 2026-05-30_
+_Status: Draft v0.3 · Last updated 2026-05-30_
 
 This document defines **what FamilyApp is, what it does, and — just as importantly —
 what it deliberately does not do**, plus the **requirements, architecture, a critical review
@@ -230,17 +230,17 @@ Keep HA Green only if you specifically want a separate dedicated HA appliance (t
 - **C15 — Idea board moderation.** Kids posting freely needs light parental moderation.
   **Resolution:** admins can hide/remove posts; default is visible-to-family only.
 
-### The big hidden dependency (needs your decision — see §9)
-- **C16 — A *native SwiftUI* app re-introduces Apple as a gatekeeper, which fights the
-  independence principle.** To install a native app on the family's iPads/iPhones you need the
-  **Apple Developer Program ($99/yr)** and distribution via **TestFlight (builds expire ~90
-  days)** or the App Store — plus signing, ATS, and APNs. That's real, recurring dependence on
-  Apple's platform for *distribution*, exactly what Principle 2 warns against. The scaffolded
-  SwiftUI app is great UX, but a **self-hosted PWA** (served from the Docker host, installed to
-  the home screen) needs *no* Apple Developer account, deploys/updates instantly, and is
-  cross-platform — at the cost of less-native polish, weaker iOS push, and fiddlier kiosk
-  behavior. **This is a genuine fork that changes the client stack; decide before building the
-  client (Stage 3).**
+### Accepted dependency (decided)
+- **C16 — Native SwiftUI requires a code-signing/distribution path through Apple — accepted.**
+  Stock iOS won't run *unsigned* apps, but signing does **not** require the public App Store.
+  **Decision:** keep the app **native SwiftUI** and distribute **privately** via the **Apple
+  Developer Program ($99/yr)** using **TestFlight** (easy over-the-air install for family
+  phones, incl. remote members) and/or **ad-hoc/development signing** for the iPad wall kiosk.
+  **No public App Store listing, no App Store review.** Accepted costs: **$99/yr recurring**
+  (not one-time) and a **periodic re-sign/reinstall** — ~yearly for ad-hoc/dev provisioning,
+  every ~90 days for TestFlight builds. Requires a **Mac with Xcode** to build/sign. The
+  self-hosted-PWA alternative is dropped. Note this is platform dependence for *distribution
+  and push* only (Principle 2) — all family **data** still stays on the home server.
 
 ---
 
@@ -253,14 +253,15 @@ Keep HA Green only if you specifically want a separate dedicated HA appliance (t
 - Remote access = **Tailscale**; Alexa exposure (if used) = **Cloudflare Tunnel + mTLS**.
 - LAN TLS = **Caddy/Traefik + Let's Encrypt DNS-01**.
 - Recognition points master = **Donetick**, surfaced via backend.
+- **Client stack = native SwiftUI** (keep the scaffold), distributed **privately via the Apple
+  Developer Program ($99/yr)** — **TestFlight** for family phones + **ad-hoc/dev signing** for
+  the iPad kiosk; **no App Store**. Accept $99/yr + periodic re-sign (C16).
 
 **Still open (need your call)**
-1. **Client stack: native SwiftUI vs self-hosted PWA** (C16). Biggest decision; affects Apple
-   Developer Program, distribution, push, and the existing scaffold.
-2. **Custom backend: PocketBase (lightest, REST, no offline sync) vs Couchbase Lite + CouchDB
+1. **Custom backend: PocketBase (lightest, REST, no offline sync) vs Couchbase Lite + CouchDB
    (true offline-first, heavier).** Drives whether v1 is offline-capable.
-3. **Voice now or later: HA-brokered Alexa in v1 (not private) vs defer to local HA Assist (v2).**
-4. **Internal domain + DNS provider** for Let's Encrypt DNS-01 (needed for clean LAN TLS).
+2. **Voice now or later: HA-brokered Alexa in v1 (not private) vs defer to local HA Assist (v2).**
+3. **Internal domain + DNS provider** for Let's Encrypt DNS-01 (needed for clean LAN TLS).
 
 ---
 
@@ -284,20 +285,22 @@ subscribe Apple Calendar to CalDAV; verify HA reads Mealie + calendar.
 - _Depends on:_ M0. _Risks:_ identity mapping complexity.
 
 ### Stage 2 — Custom backend
-Stand up the backend (per §9.2); data model for members, house rules, idea board, recognition
-aggregation; events API proxying CalDAV (C8); auth + roles + admin PIN (C5); read Donetick
-points (C7).
+Stand up the backend (per open decision §9.1); data model for members, house rules, idea board,
+recognition aggregation; events API proxying CalDAV (C8); auth + roles + admin PIN (C5); read
+Donetick points (C7).
 - **M2 — "Backend API live":** authenticated REST API serves dashboard data, rules, ideas, and
   a member's total stars; admin-gated actions enforced.
-- _Depends on:_ M1, decision §9.2. _Risks:_ CalDAV write proxy edge cases.
+- _Depends on:_ M1, decision §9.1 (backend). _Risks:_ CalDAV write proxy edge cases.
 
-### Stage 3 — Client(s) + hub
-Build the client per §9.1 (native vs PWA): weekly dashboard, tasks, meals, calendar, rules,
-idea board; iPad **kiosk mode** with offline last-week cache (C14); child PIN / admin PIN.
+### Stage 3 — Native SwiftUI client(s) + hub
+Build the native SwiftUI clients (C16): weekly dashboard, tasks, meals, calendar, rules,
+idea board; iPad **kiosk mode** (Guided Access) with offline last-week cache (C14); child PIN /
+admin PIN. Set up Apple Developer Program; TestFlight for phones, ad-hoc/dev signing for the
+kiosk.
 - **M3 — "Family adoption test":** the whole family uses the hub + phones for **one week**;
   core questions answered in <3 s; ≥1 idea posted and ≥1 chore approved by each member.
-- _Depends on:_ M2, decision §9.1. _Risks:_ adoption (the real risk); distribution friction if
-  native.
+- _Depends on:_ M2, decision §9.1 (backend). _Risks:_ adoption (the real risk); first-time
+  signing/TestFlight setup; yearly re-sign reminder for the kiosk.
 
 ### Stage 4 — Voice & reminders (optional in v1)
 HA Custom Skill intents for "what's for dinner" / "what's on today" reading Mealie + calendar;
@@ -328,8 +331,9 @@ personalization.
   unavoidable. The fully-private alternative is deferred HA Assist (v2).
 - **Phone push notifications:** iOS push ultimately goes through Apple's APNs (even via the HA
   Companion relay). Local/hub announcements avoid this.
-- **Native app distribution:** if we go native (C16/§9.1), installing/updating the app depends
-  on Apple's Developer Program/TestFlight/App Store. A PWA avoids this.
+- **Native app distribution & push:** the chosen native SwiftUI client is installed/updated
+  via Apple's Developer Program (TestFlight/ad-hoc) and iOS push goes through APNs — platform
+  dependence for *distribution and notifications only*, not for data.
 - **Optional edge services:** Cloudflare (Alexa tunnel) and Tailscale (coordination server)
   sit in their respective paths. Both can be self-hosted/replaced later (e.g., Headscale for
   Tailscale) if desired.
